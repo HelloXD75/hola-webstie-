@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hola</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  body { animation: bgshift 12s linear infinite; font-family: "Comic Sans MS", "Chalkboard SE", cursive, sans-serif; }
+  @keyframes bgshift {
+    0% { background: #0a0020; } 25% { background: #200030; }
+    50% { background: #002a2a; } 75% { background: #2a1500; } 100% { background: #0a0020; }
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+  .floaters { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+  .floater { position: absolute; will-change: transform; user-select: none; }
+  #hola {
+    position: fixed; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
+    margin: 0; font-size: clamp(4rem, 22vw, 20rem); font-weight: 900; letter-spacing: .02em;
+    pointer-events: none; text-transform: uppercase;
+    background: linear-gradient(90deg, #ff0080, #ff8c00, #ffee00, #00ff88, #00cfff, #b400ff, #ff0080);
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: rainbow 4s linear infinite, wobble 2.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px rgba(255,255,255,.5));
+  }
+  @keyframes rainbow { to { background-position: 300% 0; } }
+  @keyframes wobble {
+    0%,100% { transform: rotate(-4deg) scale(1); }
+    25% { transform: rotate(3deg) scale(1.08) skewX(6deg); }
+    50% { transform: rotate(-2deg) scale(.95) skewY(-5deg); }
+    75% { transform: rotate(5deg) scale(1.12); }
+  }
+  #hola.glitch { transform: translate(var(--gx), var(--gy)); text-shadow: 6px 0 #f0f, -6px 0 #0ff; }
+  .toast {
+    position: fixed; z-index: 3; padding: 6px 12px; border-radius: 999px; font-size: 14px;
+    background: #fff; color: #000; pointer-events: none; animation: pop 2.2s forwards; font-weight: bold;
+  }
+  @keyframes pop { 0% { transform: scale(0) rotate(-20deg); opacity: 0; } 15% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+    80% { opacity: 1; } 100% { transform: scale(1) translateY(-60px); opacity: 0; } }
+  #hint { position: fixed; bottom: 10px; left: 0; right: 0; text-align: center; color: #fff8; z-index: 3; font-size: 13px; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="floaters" id="floaters"></div>
+<h1 id="hola">Hola</h1>
+<div id="hint">click anywhere. or don't. whatever.</div>
+
+<script>
+(() => {
+  const rnd = (a, b) => Math.random() * (b - a) + a;
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  const resize = () => { W = canvas.width = innerWidth; H = canvas.height = innerHeight; };
+  addEventListener('resize', resize); resize();
+
+  // --- Background: bouncing neon orbs with trails + shooting lines ---
+  const orbs = Array.from({ length: 28 }, () => ({
+    x: rnd(0, W), y: rnd(0, H), vx: rnd(-3, 3), vy: rnd(-3, 3),
+    r: rnd(8, 60), h: rnd(0, 360), dh: rnd(-2, 2)
+  }));
+  const bursts = [];
+  function spawnBurst(x, y) {
+    for (let i = 0; i < 40; i++) {
+      const a = rnd(0, Math.PI * 2), s = rnd(2, 12);
+      bursts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, h: rnd(0, 360) });
+    }
+  }
+  let t = 0;
+  function frame() {
+    t++;
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(0, 0, W, H);
+    // spinning spiral
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(t * 0.01);
+    for (let i = 0; i < 120; i++) {
+      const a = i * 0.35 + t * 0.03, r = i * Math.max(W, H) / 220;
+      ctx.fillStyle = `hsla(${(i * 4 + t * 2) % 360},100%,60%,0.35)`;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 2 + i / 25, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    // orbs
+    for (const o of orbs) {
+      o.x += o.vx; o.y += o.vy; o.h += o.dh;
+      if (o.x < 0 || o.x > W) o.vx *= -1;
+      if (o.y < 0 || o.y > H) o.vy *= -1;
+      const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+      g.addColorStop(0, `hsla(${o.h},100%,70%,.9)`); g.addColorStop(1, `hsla(${o.h},100%,50%,0)`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, 7); ctx.fill();
+    }
+    // random shooting lines
+    if (Math.random() < 0.08) {
+      ctx.strokeStyle = `hsl(${rnd(0, 360)},100%,70%)`; ctx.lineWidth = rnd(1, 5);
+      ctx.beginPath(); ctx.moveTo(rnd(0, W), rnd(0, H)); ctx.lineTo(rnd(0, W), rnd(0, H)); ctx.stroke();
+    }
+    // bursts
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i]; b.x += b.vx; b.y += b.vy; b.vy += 0.15; b.life -= 0.015;
+      if (b.life <= 0) { bursts.splice(i, 1); continue; }
+      ctx.fillStyle = `hsla(${b.h},100%,60%,${b.life})`; ctx.fillRect(b.x, b.y, 5, 5);
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+
+  // --- Floating random emoji ---
+  const emoji = ['👽','🌮','🔥','🐸','🛸','💀','🍕','🦄','🌈','👁️','🧀','🪩','🐙','💥','🥑','🦖','🧿','🍄','⚡','🐔','🎸','🫠','🦆','🌵','💿','🚀','🐢','🧃'];
+  const box = document.getElementById('floaters');
+  function floater() {
+    const el = document.createElement('div');
+    el.className = 'floater';
+    el.textContent = pick(emoji);
+    const size = rnd(24, 120);
+    el.style.fontSize = size + 'px';
+    el.style.left = rnd(-5, 100) + 'vw';
+    el.style.top = rnd(-5, 100) + 'vh';
+    box.appendChild(el);
+    const dx = rnd(-600, 600), dy = rnd(-600, 600), rot = rnd(-1080, 1080), dur = rnd(2500, 7000);
+    el.animate([
+      { transform: 'translate(0,0) rotate(0deg) scale(.2)', opacity: 0 },
+      { transform: `translate(${dx / 2}px,${dy / 2}px) rotate(${rot / 2}deg) scale(1.3)`, opacity: 1, offset: .5 },
+      { transform: `translate(${dx}px,${dy}px) rotate(${rot}deg) scale(.2)`, opacity: 0 }
+    ], { duration: dur, easing: 'ease-in-out' }).onfinish = () => el.remove();
+  }
+  setInterval(floater, 220);
+
+  // --- Random chaotic toasts ---
+  const words = ['random','???','chaos','vibes','uhh','BEEP','why','banana','404','sus','yeet','wow','hmm','blorp','lol','no thoughts','spaghetti','zoom','glorp','hola again'];
+  function toast(x, y, text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text || pick(words);
+    el.style.left = (x ?? rnd(5, 85) * innerWidth / 100) + 'px';
+    el.style.top = (y ?? rnd(5, 90) * innerHeight / 100) + 'px';
+    el.style.background = `hsl(${rnd(0, 360)},100%,70%)`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2300);
+  }
+  setInterval(() => toast(), 900);
+
+  // --- Glitch + page-level randomness ---
+  const hola = document.getElementById('hola');
+  setInterval(() => {
+    hola.style.setProperty('--gx', rnd(-20, 20) + 'px');
+    hola.style.setProperty('--gy', rnd(-20, 20) + 'px');
+    hola.classList.add('glitch');
+    setTimeout(() => hola.classList.remove('glitch'), 120);
+  }, 1600);
+
+  setInterval(() => {
+    if (Math.random() < 0.3) {
+      document.body.style.filter = pick(['invert(1)', 'hue-rotate(180deg)', 'saturate(4)', 'contrast(2)', 'blur(2px)']);
+      setTimeout(() => document.body.style.filter = '', rnd(150, 600));
+    }
+  }, 2000);
+
+  // Tab title shenanigans
+  const titles = ['Hola', 'HOLA', 'hOlA', 'Hola 👋', '¡Hola!', 'HoLa HoLa'];
+  setInterval(() => document.title = pick(titles), 700);
+
+  // Click interaction
+  addEventListener('pointerdown', e => {
+    spawnBurst(e.clientX, e.clientY);
+    toast(e.clientX, e.clientY, pick(['HOLA!','¡HOLA!','hola?','HOLAAA']));
+  });
+  addEventListener('pointermove', e => { if (Math.random() < 0.06) spawnBurst(e.clientX, e.clientY); });
+})();
+</script>
+</body>
+</html>
